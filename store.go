@@ -120,10 +120,7 @@ func trailingLineSize(f *os.File, size int64) (int64, error) {
 	buf := make([]byte, chunkSize)
 	var total int64
 	for end := size; end > 0; {
-		start := end - chunkSize
-		if start < 0 {
-			start = 0
-		}
+		start := max(end-chunkSize, 0)
 		n := int(end - start)
 		if _, err := f.ReadAt(buf[:n], start); err != nil {
 			return 0, err
