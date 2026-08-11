@@ -267,7 +267,7 @@ _fhistory_select() {
 		FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= \
 		fzf --ansi --height=80% --reverse --prompt="Global> " --tiebreak=index \
 			--tabstop=1 --delimiter='\t' --with-nth=2.. \
-			--preview="zhist get -id {1}" --preview-window=down,3,wrap \
+			--preview="zhist get -id {1}" --preview-window=down,4,wrap \
 			--header="ctrl-g: dir/global · ctrl-d: delete entry · ctrl-x: delete all · ctrl-/: preview" \
 			--bind "tab:accept" \
 			--bind "ctrl-/:toggle-preview" \
