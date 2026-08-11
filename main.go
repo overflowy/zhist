@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -98,16 +99,37 @@ func writeAll(path string, entries []Entry) error {
 	return os.Rename(tmp, path)
 }
 
-func appendEntry(path string, e Entry) error {
+func withHistoryLock(path string, fn func() error) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	lock, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	return json.NewEncoder(f).Encode(e)
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		lock.Close()
+		return err
+	}
+	defer func() {
+		syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+		lock.Close()
+	}()
+	return fn()
+}
+
+func appendEntry(path string, e Entry) error {
+	return withHistoryLock(path, func() error {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		if err := json.NewEncoder(f).Encode(e); err != nil {
+			f.Close()
+			return err
+		}
+		return f.Close()
+	})
 }
 
 func relTime(t int64, now int64) string {
@@ -219,32 +241,34 @@ func cmdDelete(args []string) {
 	all := fs.Bool("all", false, "delete every entry with the same command")
 	fs.Parse(args)
 	path := dataPath()
-	entries, err := readAll(path)
+	err := withHistoryLock(path, func() error {
+		entries, err := readAll(path)
+		if err != nil {
+			return err
+		}
+		targetCommand := ""
+		for i := range entries {
+			if entries[i].id() == *id {
+				targetCommand = entries[i].C
+				break
+			}
+		}
+		if targetCommand == "" {
+			return nil
+		}
+		kept := entries[:0]
+		for _, e := range entries {
+			if *all && e.C == targetCommand {
+				continue
+			}
+			if !*all && e.id() == *id {
+				continue
+			}
+			kept = append(kept, e)
+		}
+		return writeAll(path, kept)
+	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "zhist:", err)
-		os.Exit(1)
-	}
-	targetCommand := ""
-	for i := range entries {
-		if entries[i].id() == *id {
-			targetCommand = entries[i].C
-			break
-		}
-	}
-	if targetCommand == "" {
-		return
-	}
-	kept := entries[:0]
-	for _, e := range entries {
-		if *all && e.C == targetCommand {
-			continue
-		}
-		if !*all && e.id() == *id {
-			continue
-		}
-		kept = append(kept, e)
-	}
-	if err := writeAll(path, kept); err != nil {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
 	}
@@ -262,10 +286,7 @@ func importHistory(source, path string) (int, error) {
 	defer f.Close()
 
 	n := 0
-	err = func() error {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return err
-		}
+	err = withHistoryLock(path, func() error {
 		out, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
 			return err
@@ -324,7 +345,7 @@ func importHistory(source, path string) (int, error) {
 			return importErr
 		}
 		return closeErr
-	}()
+	})
 	return n, err
 }
 
