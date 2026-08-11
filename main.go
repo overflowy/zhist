@@ -21,6 +21,8 @@ import (
 	"time"
 )
 
+const maxJSONLineSize = 4 * 1024 * 1024
+
 type Entry struct {
 	T int64  `json:"t"` // unix timestamp
 	D string `json:"d"` // working directory ("" if unknown)
@@ -52,7 +54,7 @@ func readAll(path string) ([]Entry, error) {
 	defer f.Close()
 	var out []Entry
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLineSize)
 	line := 0
 	for sc.Scan() {
 		line++
@@ -118,7 +120,24 @@ func withHistoryLock(path string, fn func() error) error {
 	return fn()
 }
 
+func validateEntrySize(e Entry) error {
+	encoded, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	size := len(encoded) + 1
+	if size > maxJSONLineSize {
+		return fmt.Errorf("encoded JSON line for entry %s is %d bytes; limit is %d", e.id(), size, maxJSONLineSize)
+	}
+	return nil
+}
+
 func appendEntries(path string, entries []Entry) error {
+	for _, e := range entries {
+		if err := validateEntrySize(e); err != nil {
+			return err
+		}
+	}
 	if len(entries) == 0 {
 		return nil
 	}
@@ -313,13 +332,18 @@ func importHistory(source, path string) (int, error) {
 
 	var entries []Entry
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLineSize)
 	var cur *Entry
-	flush := func() {
-		if cur != nil {
-			entries = append(entries, *cur)
-			cur = nil
+	flush := func() error {
+		if cur == nil {
+			return nil
 		}
+		if err := validateEntrySize(*cur); err != nil {
+			return err
+		}
+		entries = append(entries, *cur)
+		cur = nil
+		return nil
 	}
 	for sc.Scan() {
 		line := sc.Text()
@@ -327,7 +351,9 @@ func importHistory(source, path string) (int, error) {
 			// Continuation of a multiline entry.
 			cur.C += "\n" + strings.TrimSuffix(line, "\\")
 			if !strings.HasSuffix(line, "\\") {
-				flush()
+				if err := flush(); err != nil {
+					return 0, err
+				}
 			}
 			continue
 		}
@@ -342,13 +368,17 @@ func importHistory(source, path string) (int, error) {
 		cmd := m[3]
 		cur = &Entry{T: t, X: -1, C: strings.TrimSuffix(cmd, "\\")}
 		if !strings.HasSuffix(cmd, "\\") {
-			flush()
+			if err := flush(); err != nil {
+				return 0, err
+			}
 		}
 	}
 	if err := sc.Err(); err != nil {
 		return 0, err
 	}
-	flush()
+	if err := flush(); err != nil {
+		return 0, err
+	}
 	if err := appendEntries(path, entries); err != nil {
 		return 0, err
 	}
