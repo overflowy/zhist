@@ -463,7 +463,9 @@ _fhistory_select() {
 	local reload="if [ \"\$FZF_PROMPT\" = \"Dir> \" ]; then zhist list -dir $qpwd; else zhist list; fi"
 	local toggle="if [ \"\$FZF_PROMPT\" = \"Dir> \" ]; then echo \"change-prompt(Global> )+reload(zhist list)\"; else echo \"change-prompt(Dir> )+reload(zhist list -dir $qpwd)\"; fi"
 	local id
+	# Clear the user's fzf defaults so zhist renders the same on every machine.
 	id=$(zhist list |
+		FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= \
 		fzf --ansi --height=80% --reverse --prompt="Global> " --no-sort \
 			--tabstop=1 --delimiter='\t' --with-nth=2.. \
 			--header="ctrl-g: dir/global · ctrl-d: delete entry · ctrl-x: delete all" \
