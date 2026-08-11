@@ -261,16 +261,22 @@ _fhistory_select() {
 	# Branches on $FZF_PROMPT so reloads keep whatever mode ctrl-g selected.
 	local reload="if [ \"\$FZF_PROMPT\" = \"Dir> \" ]; then zhist list -dir $qpwd; else zhist list; fi"
 	local toggle="if [ \"\$FZF_PROMPT\" = \"Dir> \" ]; then echo \"change-prompt(Global> )+reload(zhist list)\"; else echo \"change-prompt(Dir> )+reload(zhist list -dir $qpwd)\"; fi"
+	# Preview visibility persists across sessions via a flag file.
+	local pstate="${XDG_STATE_HOME:-$HOME/.local/state}/zhist/preview-hidden"
+	mkdir -p "${pstate:h}"
+	local qstate=${(q)pstate}
+	local pwin="down,6,wrap"
+	[[ -f "$pstate" ]] && pwin="down,6,wrap,hidden"
 	local id
 	# Clear the user's fzf defaults so zhist renders the same on every machine.
 	id=$(zhist list |
 		FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= \
 		fzf --ansi --height=80% --reverse --prompt="Global> " --tiebreak=index \
 			--tabstop=1 --delimiter='\t' --with-nth=2.. \
-			--preview="zhist get -id {1}" --preview-window=down,4,wrap \
+			--preview="zhist get -id {1}" --preview-window=$pwin \
 			--header="ctrl-g: dir/global · ctrl-d: delete entry · ctrl-x: delete all · ctrl-/: preview" \
 			--bind "tab:accept" \
-			--bind "ctrl-/:toggle-preview" \
+			--bind "ctrl-/:toggle-preview+execute-silent(if [ -f $qstate ]; then rm -f $qstate; else touch $qstate; fi)" \
 			--bind "ctrl-g:transform:$toggle" \
 			--bind "ctrl-d:execute-silent(zhist delete -id {1})+reload($reload)" \
 			--bind "ctrl-x:execute-silent(zhist delete -id {1} -all)+reload($reload)" |
