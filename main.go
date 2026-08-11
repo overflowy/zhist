@@ -292,20 +292,23 @@ func cmdImport(args []string) {
 	}
 	for sc.Scan() {
 		line := sc.Text()
-		if m := zshHistLine.FindStringSubmatch(line); m != nil {
-			flush()
-			t, _ := strconv.ParseInt(m[1], 10, 64)
-			cmd := m[3]
-			cur = &Entry{T: t, X: -1, C: strings.TrimSuffix(cmd, "\\")}
-			if !strings.HasSuffix(cmd, "\\") {
-				flush()
-			}
-		} else if cur != nil {
+		if cur != nil {
 			// Continuation of a multiline entry.
 			cur.C += "\n" + strings.TrimSuffix(line, "\\")
 			if !strings.HasSuffix(line, "\\") {
 				flush()
 			}
+			continue
+		}
+		m := zshHistLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		t, _ := strconv.ParseInt(m[1], 10, 64)
+		cmd := m[3]
+		cur = &Entry{T: t, X: -1, C: strings.TrimSuffix(cmd, "\\")}
+		if !strings.HasSuffix(cmd, "\\") {
+			flush()
 		}
 	}
 	flush()
