@@ -142,7 +142,7 @@ func appendEntries(path string, entries []Entry) error {
 		return nil
 	}
 	return withHistoryLock(path, func() error {
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600)
 		if err != nil {
 			return err
 		}
@@ -155,6 +155,20 @@ func appendEntries(path string, entries []Entry) error {
 		rollback := func() {
 			if err := f.Truncate(originalSize); err != nil {
 				_ = os.Truncate(path, originalSize)
+			}
+		}
+		if originalSize > 0 {
+			var last [1]byte
+			if _, err := f.ReadAt(last[:], originalSize-1); err != nil {
+				f.Close()
+				return err
+			}
+			if last[0] != '\n' {
+				if _, err := f.Write([]byte{'\n'}); err != nil {
+					rollback()
+					f.Close()
+					return err
+				}
 			}
 		}
 		enc := json.NewEncoder(f)
