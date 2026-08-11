@@ -127,14 +127,30 @@ func appendEntries(path string, entries []Entry) error {
 		if err != nil {
 			return err
 		}
+		info, err := f.Stat()
+		if err != nil {
+			f.Close()
+			return err
+		}
+		originalSize := info.Size()
+		rollback := func() {
+			if err := f.Truncate(originalSize); err != nil {
+				_ = os.Truncate(path, originalSize)
+			}
+		}
 		enc := json.NewEncoder(f)
 		for _, e := range entries {
 			if err := enc.Encode(e); err != nil {
+				rollback()
 				f.Close()
 				return err
 			}
 		}
-		return f.Close()
+		if err := f.Close(); err != nil {
+			rollback()
+			return err
+		}
+		return nil
 	})
 }
 
