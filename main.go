@@ -118,18 +118,28 @@ func withHistoryLock(path string, fn func() error) error {
 	return fn()
 }
 
-func appendEntry(path string, e Entry) error {
+func appendEntries(path string, entries []Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
 	return withHistoryLock(path, func() error {
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
 			return err
 		}
-		if err := json.NewEncoder(f).Encode(e); err != nil {
-			f.Close()
-			return err
+		enc := json.NewEncoder(f)
+		for _, e := range entries {
+			if err := enc.Encode(e); err != nil {
+				f.Close()
+				return err
+			}
 		}
 		return f.Close()
 	})
+}
+
+func appendEntry(path string, e Entry) error {
+	return appendEntries(path, []Entry{e})
 }
 
 func relTime(t int64, now int64) string {
@@ -285,68 +295,48 @@ func importHistory(source, path string) (int, error) {
 	}
 	defer f.Close()
 
-	n := 0
-	err = withHistoryLock(path, func() error {
-		out, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-		if err != nil {
-			return err
-		}
-		enc := json.NewEncoder(out)
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-		var cur *Entry
-		flush := func() error {
-			if cur == nil {
-				return nil
-			}
-			if err := enc.Encode(*cur); err != nil {
-				return err
-			}
-			n++
+	var entries []Entry
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	var cur *Entry
+	flush := func() {
+		if cur != nil {
+			entries = append(entries, *cur)
 			cur = nil
-			return nil
 		}
-		importErr := func() error {
-			for sc.Scan() {
-				line := sc.Text()
-				if cur != nil {
-					// Continuation of a multiline entry.
-					cur.C += "\n" + strings.TrimSuffix(line, "\\")
-					if !strings.HasSuffix(line, "\\") {
-						if err := flush(); err != nil {
-							return err
-						}
-					}
-					continue
-				}
-				m := zshHistLine.FindStringSubmatch(line)
-				if m == nil {
-					continue
-				}
-				t, err := strconv.ParseInt(m[1], 10, 64)
-				if err != nil {
-					return err
-				}
-				cmd := m[3]
-				cur = &Entry{T: t, X: -1, C: strings.TrimSuffix(cmd, "\\")}
-				if !strings.HasSuffix(cmd, "\\") {
-					if err := flush(); err != nil {
-						return err
-					}
-				}
+	}
+	for sc.Scan() {
+		line := sc.Text()
+		if cur != nil {
+			// Continuation of a multiline entry.
+			cur.C += "\n" + strings.TrimSuffix(line, "\\")
+			if !strings.HasSuffix(line, "\\") {
+				flush()
 			}
-			if err := sc.Err(); err != nil {
-				return err
-			}
-			return flush()
-		}()
-		closeErr := out.Close()
-		if importErr != nil {
-			return importErr
+			continue
 		}
-		return closeErr
-	})
-	return n, err
+		m := zshHistLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		t, err := strconv.ParseInt(m[1], 10, 64)
+		if err != nil {
+			return 0, err
+		}
+		cmd := m[3]
+		cur = &Entry{T: t, X: -1, C: strings.TrimSuffix(cmd, "\\")}
+		if !strings.HasSuffix(cmd, "\\") {
+			flush()
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return 0, err
+	}
+	flush()
+	if err := appendEntries(path, entries); err != nil {
+		return 0, err
+	}
+	return len(entries), nil
 }
 
 func cmdImport(args []string) {
