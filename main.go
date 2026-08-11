@@ -72,8 +72,12 @@ func readAll(path string) ([]Entry, error) {
 
 func writeAll(path string, entries []Entry) error {
 	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
+	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
+		return err
+	}
+	if err := f.Chmod(0o600); err != nil {
+		f.Close()
 		return err
 	}
 	w := bufio.NewWriter(f)
