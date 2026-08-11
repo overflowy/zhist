@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -86,8 +87,7 @@ func cmdList(args []string) {
 	defer w.Flush()
 	seen := make(map[string]bool, len(rows))
 	// Newest first, dedup by command keeping the most recent occurrence.
-	for i := len(rows) - 1; i >= 0; i-- {
-		row := rows[i]
+	for _, row := range slices.Backward(rows) {
 		e := row.Entry
 		if *dir != "" && e.D != *dir {
 			continue
