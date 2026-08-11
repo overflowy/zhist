@@ -141,7 +141,12 @@ func trailingLineSize(f *os.File, size int64) (int64, error) {
 }
 
 func (s Store) List() ([]Row, error) {
-	rows, err := s.readAll()
+	var rows []storedRow
+	err := s.withReadLock(func() error {
+		var err error
+		rows, err = s.readAll()
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +162,7 @@ func (s Store) Get(id string) (Entry, error) {
 	if !ok {
 		return Entry{}, errEntryNotFound
 	}
+	// Keep the direct seek lockless. Verification rejects torn reads before fallback.
 	entry, matched, err := s.getAt(offset, hash)
 	if err != nil {
 		return Entry{}, err
@@ -165,7 +171,12 @@ func (s Store) Get(id string) (Entry, error) {
 		return entry, nil
 	}
 
-	rows, err := s.readAll()
+	var rows []storedRow
+	err = s.withReadLock(func() error {
+		var err error
+		rows, err = s.readAll()
+		return err
+	})
 	if err != nil {
 		return Entry{}, err
 	}
@@ -294,6 +305,7 @@ func (s Store) getAt(offset int64, hash string) (Entry, bool, error) {
 	return entry, true, nil
 }
 
+// Callers lock readAll because Delete already holds the exclusive lock; relocking can deadlock.
 func (s Store) readAll() ([]storedRow, error) {
 	f, err := os.Open(s.path)
 	if os.IsNotExist(err) {
@@ -385,6 +397,14 @@ func (s Store) writeAll(entries []Entry) error {
 }
 
 func (s Store) withLock(fn func() error) error {
+	return s.withFlock(syscall.LOCK_EX, fn)
+}
+
+func (s Store) withReadLock(fn func() error) error {
+	return s.withFlock(syscall.LOCK_SH, fn)
+}
+
+func (s Store) withFlock(mode int, fn func() error) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
@@ -392,7 +412,7 @@ func (s Store) withLock(fn func() error) error {
 	if err != nil {
 		return err
 	}
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(lock.Fd()), mode); err != nil {
 		lock.Close()
 		return err
 	}
