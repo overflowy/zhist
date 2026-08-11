@@ -252,8 +252,82 @@ func cmdDelete(args []string) {
 
 var zshHistLine = regexp.MustCompile(`^: (\d+):(\d+);(.*)$`)
 
-// cmdImport reads a zsh EXTENDED_HISTORY file. Directory and exit status are
-// unknown for imported entries.
+// importHistory reads a zsh EXTENDED_HISTORY file. Directory and exit status
+// are unknown for imported entries.
+func importHistory(source, path string) (int, error) {
+	f, err := os.Open(source)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	n := 0
+	err = func() error {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		out, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		enc := json.NewEncoder(out)
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		var cur *Entry
+		flush := func() error {
+			if cur == nil {
+				return nil
+			}
+			if err := enc.Encode(*cur); err != nil {
+				return err
+			}
+			n++
+			cur = nil
+			return nil
+		}
+		importErr := func() error {
+			for sc.Scan() {
+				line := sc.Text()
+				if cur != nil {
+					// Continuation of a multiline entry.
+					cur.C += "\n" + strings.TrimSuffix(line, "\\")
+					if !strings.HasSuffix(line, "\\") {
+						if err := flush(); err != nil {
+							return err
+						}
+					}
+					continue
+				}
+				m := zshHistLine.FindStringSubmatch(line)
+				if m == nil {
+					continue
+				}
+				t, err := strconv.ParseInt(m[1], 10, 64)
+				if err != nil {
+					return err
+				}
+				cmd := m[3]
+				cur = &Entry{T: t, X: -1, C: strings.TrimSuffix(cmd, "\\")}
+				if !strings.HasSuffix(cmd, "\\") {
+					if err := flush(); err != nil {
+						return err
+					}
+				}
+			}
+			if err := sc.Err(); err != nil {
+				return err
+			}
+			return flush()
+		}()
+		closeErr := out.Close()
+		if importErr != nil {
+			return importErr
+		}
+		return closeErr
+	}()
+	return n, err
+}
+
 func cmdImport(args []string) {
 	fs := flag.NewFlagSet("import", flag.ExitOnError)
 	fs.Parse(args)
@@ -261,57 +335,11 @@ func cmdImport(args []string) {
 		fmt.Fprintln(os.Stderr, "usage: zhist import <zsh_history_file>")
 		os.Exit(2)
 	}
-	f, err := os.Open(fs.Arg(0))
+	n, err := importHistory(fs.Arg(0), dataPath())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
 	}
-	defer f.Close()
-	path := dataPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		fmt.Fprintln(os.Stderr, "zhist:", err)
-		os.Exit(1)
-	}
-	out, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "zhist:", err)
-		os.Exit(1)
-	}
-	defer out.Close()
-	enc := json.NewEncoder(out)
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	n := 0
-	var cur *Entry
-	flush := func() {
-		if cur != nil {
-			enc.Encode(*cur)
-			n++
-			cur = nil
-		}
-	}
-	for sc.Scan() {
-		line := sc.Text()
-		if cur != nil {
-			// Continuation of a multiline entry.
-			cur.C += "\n" + strings.TrimSuffix(line, "\\")
-			if !strings.HasSuffix(line, "\\") {
-				flush()
-			}
-			continue
-		}
-		m := zshHistLine.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		t, _ := strconv.ParseInt(m[1], 10, 64)
-		cmd := m[3]
-		cur = &Entry{T: t, X: -1, C: strings.TrimSuffix(cmd, "\\")}
-		if !strings.HasSuffix(cmd, "\\") {
-			flush()
-		}
-	}
-	flush()
 	fmt.Printf("imported %d entries\n", n)
 }
 
