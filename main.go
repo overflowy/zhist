@@ -120,7 +120,10 @@ func withHistoryLock(path string, fn func() error) error {
 	return fn()
 }
 
-func validateEntrySize(e Entry) error {
+func validateEntry(e Entry) error {
+	if e.C == "" {
+		return fmt.Errorf("empty command")
+	}
 	encoded, err := json.Marshal(e)
 	if err != nil {
 		return err
@@ -134,7 +137,7 @@ func validateEntrySize(e Entry) error {
 
 func appendEntries(path string, entries []Entry) error {
 	for _, e := range entries {
-		if err := validateEntrySize(e); err != nil {
+		if err := validateEntry(e); err != nil {
 			return err
 		}
 	}
@@ -352,7 +355,7 @@ func importHistory(source, path string) (int, error) {
 		if cur == nil {
 			return nil
 		}
-		if err := validateEntrySize(*cur); err != nil {
+		if err := validateEntry(*cur); err != nil {
 			return err
 		}
 		entries = append(entries, *cur)
@@ -380,6 +383,9 @@ func importHistory(source, path string) (int, error) {
 			return 0, err
 		}
 		cmd := m[3]
+		if cmd == "" {
+			continue
+		}
 		cur = &Entry{T: t, X: -1, C: strings.TrimSuffix(cmd, "\\")}
 		if !strings.HasSuffix(cmd, "\\") {
 			if err := flush(); err != nil {
