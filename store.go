@@ -386,6 +386,11 @@ func (s Store) writeAll(entries []Entry) error {
 		f.Close()
 		return err
 	}
+	// Renaming without syncing the file and directory can expose empty or stale history after a crash.
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
 	if err := f.Close(); err != nil {
 		return err
 	}
@@ -393,7 +398,17 @@ func (s Store) writeAll(entries []Entry) error {
 		return err
 	}
 	removeTemp = false
-	return nil
+
+	dir, err := os.Open(filepath.Dir(s.path))
+	if err != nil {
+		return err
+	}
+	syncErr := dir.Sync()
+	closeErr := dir.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
 }
 
 func (s Store) withLock(fn func() error) error {
