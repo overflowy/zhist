@@ -376,8 +376,8 @@ func importHistory(source, path string) (int, error) {
 	if err := sc.Err(); err != nil {
 		return 0, err
 	}
-	if err := flush(); err != nil {
-		return 0, err
+	if cur != nil {
+		return 0, fmt.Errorf("unexpected end of file in multiline entry")
 	}
 	if err := appendEntries(path, entries); err != nil {
 		return 0, err
