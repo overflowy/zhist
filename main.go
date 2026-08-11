@@ -5,9 +5,6 @@ package main
 
 import (
 	"bufio"
-	"crypto/sha1"
-	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -17,23 +14,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
-
-const maxJSONLineSize = 4 * 1024 * 1024
-
-type Entry struct {
-	T int64  `json:"t"` // unix timestamp
-	D string `json:"d"` // working directory ("" if unknown)
-	X int    `json:"x"` // exit status (-1 if unknown)
-	C string `json:"c"` // full command, may contain newlines
-}
-
-func (e Entry) id() string {
-	h := sha1.Sum(fmt.Appendf(nil, "%d\x00%s\x00%s", e.T, e.D, e.C))
-	return hex.EncodeToString(h[:6])
-}
 
 func dataPath() string {
 	if p := os.Getenv("ZHIST_FILE"); p != "" {
@@ -41,157 +23,6 @@ func dataPath() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "share", "zhist", "history.jsonl")
-}
-
-func readAll(path string) ([]Entry, error) {
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	var out []Entry
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLineSize)
-	line := 0
-	for sc.Scan() {
-		line++
-		var e Entry
-		if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
-			return nil, fmt.Errorf("read %s line %d: %w", path, line, err)
-		}
-		if e.C == "" {
-			return nil, fmt.Errorf("read %s line %d: empty command", path, line)
-		}
-		out = append(out, e)
-	}
-	if err := sc.Err(); err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	return out, nil
-}
-
-func writeAll(path string, entries []Entry) error {
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	if err := f.Chmod(0o600); err != nil {
-		f.Close()
-		return err
-	}
-	w := bufio.NewWriter(f)
-	enc := json.NewEncoder(w)
-	for _, e := range entries {
-		if err := enc.Encode(e); err != nil {
-			f.Close()
-			return err
-		}
-	}
-	if err := w.Flush(); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
-func withHistoryLock(path string, fn func() error) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	lock, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return err
-	}
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		lock.Close()
-		return err
-	}
-	defer func() {
-		syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-		lock.Close()
-	}()
-	return fn()
-}
-
-func validateEntry(e Entry) error {
-	if e.C == "" {
-		return fmt.Errorf("empty command")
-	}
-	encoded, err := json.Marshal(e)
-	if err != nil {
-		return err
-	}
-	size := len(encoded) + 1
-	if size > maxJSONLineSize {
-		return fmt.Errorf("encoded JSON line for entry %s is %d bytes; limit is %d", e.id(), size, maxJSONLineSize)
-	}
-	return nil
-}
-
-func appendEntries(path string, entries []Entry) error {
-	for _, e := range entries {
-		if err := validateEntry(e); err != nil {
-			return err
-		}
-	}
-	if len(entries) == 0 {
-		return nil
-	}
-	return withHistoryLock(path, func() error {
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600)
-		if err != nil {
-			return err
-		}
-		info, err := f.Stat()
-		if err != nil {
-			f.Close()
-			return err
-		}
-		originalSize := info.Size()
-		rollback := func() {
-			if err := f.Truncate(originalSize); err != nil {
-				_ = os.Truncate(path, originalSize)
-			}
-		}
-		if originalSize > 0 {
-			var last [1]byte
-			if _, err := f.ReadAt(last[:], originalSize-1); err != nil {
-				f.Close()
-				return err
-			}
-			if last[0] != '\n' {
-				if _, err := f.Write([]byte{'\n'}); err != nil {
-					rollback()
-					f.Close()
-					return err
-				}
-			}
-		}
-		enc := json.NewEncoder(f)
-		for _, e := range entries {
-			if err := enc.Encode(e); err != nil {
-				rollback()
-				f.Close()
-				return err
-			}
-		}
-		if err := f.Close(); err != nil {
-			rollback()
-			return err
-		}
-		return nil
-	})
-}
-
-func appendEntry(path string, e Entry) error {
-	return appendEntries(path, []Entry{e})
 }
 
 func relTime(t int64, now int64) string {
@@ -225,7 +56,7 @@ func cmdAdd(args []string) {
 	if t == 0 {
 		t = time.Now().Unix()
 	}
-	if err := appendEntry(dataPath(), Entry{T: t, D: *dir, X: *exit, C: cmd}); err != nil {
+	if err := newStore(dataPath()).Append([]Entry{{T: t, D: *dir, X: *exit, C: cmd}}); err != nil {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
 	}
@@ -242,21 +73,22 @@ func cmdList(args []string) {
 	fs := flag.NewFlagSet("list", flag.ExitOnError)
 	dir := fs.String("dir", "", "only entries recorded in this directory")
 	fs.Parse(args)
-	entries, err := readAll(dataPath())
+	rows, err := newStore(dataPath()).List()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
 	}
 	// SHARE_HISTORY-imported files interleave sessions, so file order is not
 	// time order.
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].T < entries[j].T })
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].T < rows[j].T })
 	now := time.Now().Unix()
 	w := bufio.NewWriter(os.Stdout)
 	defer w.Flush()
-	seen := make(map[string]bool, len(entries))
+	seen := make(map[string]bool, len(rows))
 	// Newest first, dedup by command keeping the most recent occurrence.
-	for i := len(entries) - 1; i >= 0; i-- {
-		e := entries[i]
+	for i := len(rows) - 1; i >= 0; i-- {
+		row := rows[i]
+		e := row.Entry
 		if *dir != "" && e.D != *dir {
 			continue
 		}
@@ -273,7 +105,7 @@ func cmdList(args []string) {
 			col = cRed
 		}
 		fmt.Fprintf(w, "%s\t%s%8s%s\t%s%s%s\n",
-			e.id(),
+			row.ID,
 			cBlue, relTime(e.T, now), cReset,
 			col, disp, cReset)
 	}
@@ -283,18 +115,15 @@ func cmdGet(args []string) {
 	fs := flag.NewFlagSet("get", flag.ExitOnError)
 	id := fs.String("id", "", "entry id")
 	fs.Parse(args)
-	entries, err := readAll(dataPath())
+	entry, err := newStore(dataPath()).Get(*id)
+	if err == errEntryNotFound {
+		os.Exit(1)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
 	}
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].id() == *id {
-			fmt.Println(entries[i].C)
-			return
-		}
-	}
-	os.Exit(1)
+	fmt.Println(entry.C)
 }
 
 func cmdDelete(args []string) {
@@ -302,34 +131,7 @@ func cmdDelete(args []string) {
 	id := fs.String("id", "", "entry id")
 	all := fs.Bool("all", false, "delete every entry with the same command")
 	fs.Parse(args)
-	path := dataPath()
-	err := withHistoryLock(path, func() error {
-		entries, err := readAll(path)
-		if err != nil {
-			return err
-		}
-		targetCommand := ""
-		for i := range entries {
-			if entries[i].id() == *id {
-				targetCommand = entries[i].C
-				break
-			}
-		}
-		if targetCommand == "" {
-			return nil
-		}
-		kept := entries[:0]
-		for _, e := range entries {
-			if *all && e.C == targetCommand {
-				continue
-			}
-			if !*all && e.id() == *id {
-				continue
-			}
-			kept = append(kept, e)
-		}
-		return writeAll(path, kept)
-	})
+	err := newStore(dataPath()).Delete(*id, *all)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
@@ -340,7 +142,7 @@ var zshHistLine = regexp.MustCompile(`^: (\d+):(\d+);(.*)$`)
 
 // importHistory reads a zsh EXTENDED_HISTORY file. Directory and exit status
 // are unknown for imported entries.
-func importHistory(source, path string) (int, error) {
+func importHistory(source string, store Store) (int, error) {
 	f, err := os.Open(source)
 	if err != nil {
 		return 0, err
@@ -354,9 +156,6 @@ func importHistory(source, path string) (int, error) {
 	flush := func() error {
 		if cur == nil {
 			return nil
-		}
-		if err := validateEntry(*cur); err != nil {
-			return err
 		}
 		entries = append(entries, *cur)
 		cur = nil
@@ -399,7 +198,7 @@ func importHistory(source, path string) (int, error) {
 	if cur != nil {
 		return 0, fmt.Errorf("unexpected end of file in multiline entry")
 	}
-	if err := appendEntries(path, entries); err != nil {
+	if err := store.Append(entries); err != nil {
 		return 0, err
 	}
 	return len(entries), nil
@@ -412,7 +211,7 @@ func cmdImport(args []string) {
 		fmt.Fprintln(os.Stderr, "usage: zhist import <zsh_history_file>")
 		os.Exit(2)
 	}
-	n, err := importHistory(fs.Arg(0), dataPath())
+	n, err := importHistory(fs.Arg(0), newStore(dataPath()))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
