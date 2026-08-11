@@ -199,6 +199,39 @@ func TestStoreGetDirectAndFallback(t *testing.T) {
 	}
 }
 
+func TestStoreExitStatusDistinguishesIDsAndFallbackGet(t *testing.T) {
+	store := testStore(t)
+	entries := []Entry{
+		{T: 5, D: "/tmp", X: 0, C: "shift offsets"},
+		{T: 10, D: "/tmp", X: 0, C: "same"},
+		{T: 10, D: "/tmp", X: 7, C: "same"},
+	}
+	if err := store.Append(entries); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[1].ID == rows[2].ID {
+		t.Fatalf("entries with different exit statuses have the same id %q", rows[1].ID)
+	}
+
+	ids := []string{rows[1].ID, rows[2].ID}
+	if err := store.Delete(rows[0].ID, false); err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range ids {
+		got, err := store.Get(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.X != entries[i+1].X {
+			t.Errorf("Get(%q) exit status = %d, want %d", id, got.X, entries[i+1].X)
+		}
+	}
+}
+
 func TestStoreDuplicateIDsAndDelete(t *testing.T) {
 	store := testStore(t)
 	duplicate := Entry{T: 10, D: "/tmp", X: 0, C: "same"}

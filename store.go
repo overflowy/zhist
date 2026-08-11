@@ -250,7 +250,7 @@ func encodeEntry(entry Entry) ([]byte, error) {
 }
 
 func contentHash(entry Entry) string {
-	h := sha1.Sum(fmt.Appendf(nil, "%d\x00%s\x00%s", entry.T, entry.D, entry.C))
+	h := sha1.Sum(fmt.Appendf(nil, "%d\x00%s\x00%d\x00%s", entry.T, entry.D, entry.X, entry.C))
 	return hex.EncodeToString(h[:6])
 }
 
