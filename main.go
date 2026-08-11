@@ -40,22 +40,34 @@ func dataPath() string {
 	return filepath.Join(home, ".local", "share", "zhist", "history.jsonl")
 }
 
-func readAll(path string) []Entry {
+func readAll(path string) ([]Entry, error) {
 	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer f.Close()
 	var out []Entry
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	line := 0
 	for sc.Scan() {
+		line++
 		var e Entry
-		if json.Unmarshal(sc.Bytes(), &e) == nil && e.C != "" {
-			out = append(out, e)
+		if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
+			return nil, fmt.Errorf("read %s line %d: %w", path, line, err)
 		}
+		if e.C == "" {
+			return nil, fmt.Errorf("read %s line %d: empty command", path, line)
+		}
+		out = append(out, e)
 	}
-	return out
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return out, nil
 }
 
 func writeAll(path string, entries []Entry) error {
@@ -142,7 +154,11 @@ func cmdList(args []string) {
 	fs := flag.NewFlagSet("list", flag.ExitOnError)
 	dir := fs.String("dir", "", "only entries recorded in this directory")
 	fs.Parse(args)
-	entries := readAll(dataPath())
+	entries, err := readAll(dataPath())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "zhist:", err)
+		os.Exit(1)
+	}
 	// SHARE_HISTORY-imported files interleave sessions, so file order is not
 	// time order.
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].T < entries[j].T })
@@ -179,7 +195,11 @@ func cmdGet(args []string) {
 	fs := flag.NewFlagSet("get", flag.ExitOnError)
 	id := fs.String("id", "", "entry id")
 	fs.Parse(args)
-	entries := readAll(dataPath())
+	entries, err := readAll(dataPath())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "zhist:", err)
+		os.Exit(1)
+	}
 	for i := len(entries) - 1; i >= 0; i-- {
 		if entries[i].id() == *id {
 			fmt.Println(entries[i].C)
@@ -195,7 +215,11 @@ func cmdDelete(args []string) {
 	all := fs.Bool("all", false, "delete every entry with the same command")
 	fs.Parse(args)
 	path := dataPath()
-	entries := readAll(path)
+	entries, err := readAll(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "zhist:", err)
+		os.Exit(1)
+	}
 	var target *Entry
 	for i := range entries {
 		if entries[i].id() == *id {
