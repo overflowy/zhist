@@ -224,19 +224,19 @@ func cmdDelete(args []string) {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
 	}
-	var target *Entry
+	targetCommand := ""
 	for i := range entries {
 		if entries[i].id() == *id {
-			target = &entries[i]
+			targetCommand = entries[i].C
 			break
 		}
 	}
-	if target == nil {
+	if targetCommand == "" {
 		return
 	}
 	kept := entries[:0]
 	for _, e := range entries {
-		if *all && e.C == target.C {
+		if *all && e.C == targetCommand {
 			continue
 		}
 		if !*all && e.id() == *id {
