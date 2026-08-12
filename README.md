@@ -11,16 +11,6 @@ context: where you ran a command and whether it failed. The fzf picker uses
 that context. Failed commands show in red. One key toggles between global
 history and the current directory's history.
 
-## How it works
-
-- A `preexec` hook captures the command line and `$PWD`.
-- A `precmd` hook captures the exit status and appends one JSON line to the store.
-- The store lives at `~/.local/share/zhist/history.jsonl`. Override it with `$ZHIST_FILE`.
-- `zhist list` prints formatted rows for fzf. Deletes rewrite the store atomically.
-
-The precmd hook returns the original `$?`. Prompt hooks that run after it still
-see the real exit status.
-
 ## Install
 
 ```sh
@@ -59,6 +49,22 @@ and never render red.
 
 `fhistory` opens the same picker as a command.
 
+## Ignoring commands
+
+Define a `HIST_EXCLUDE` array in `.zshrc` to keep commands out of the store.
+zhist skips a command when its first word is in the array.
+
+```zsh
+HIST_EXCLUDE=(cd ls clear pwd exit)
+```
+
+- Matching is exact and case-sensitive, on the first word only. `ls` skips
+  `ls -la` but not `lsd`.
+- For multiline commands the first word of the first line decides.
+- The hook reads the array at record time. Change it in a running shell and
+  the change applies to the next command.
+- A leading space also skips recording, for one-off exclusions.
+
 ## Recommended zsh history settings
 
 zhist owns persistence. Keep native history in memory only, for line stepping
@@ -84,8 +90,6 @@ only affect the history file, which zhist replaces.
 Compatibility notes:
 
 - Commands with a leading space are not recorded. This matches `HIST_IGNORE_SPACE`.
-- Define a `HIST_EXCLUDE` array to skip commands by first word, for example
-  `HIST_EXCLUDE=(cd ls clear)`. zhist reads it if present.
 - `eval "$(zhist init)"` must run after plugins that bind `ctrl-r` or the
   arrow keys (atuin, zsh-history-substring-search, prompt pickers). The last
   bind wins.
