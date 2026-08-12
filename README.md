@@ -4,6 +4,8 @@ A shell history tool for zsh, written in Go. It records every command with its
 working directory and exit status. It replaces the zsh history file as the
 persistent store.
 
+https://github.com/user-attachments/assets/a7e1226b-e695-4505-ad96-a5da6dfb3afd
+
 ## Purpose
 
 Native zsh history stores a command and a timestamp, nothing else. zhist stores
