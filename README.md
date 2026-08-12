@@ -47,8 +47,6 @@ and never render red.
 | `ctrl-x`           | Delete all entries with the same command          |
 | `tab`              | Accept and leave the command on the line          |
 
-`fhistory` opens the same picker as a command.
-
 ## Ignoring commands
 
 Define a `HIST_EXCLUDE` array in `.zshrc` to keep commands out of the store.

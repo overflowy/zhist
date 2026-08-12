@@ -254,8 +254,6 @@ add-zsh-hook preexec _zhist_preexec
 # Prepend so we read $? before other precmd hooks (prompt, atuin) clobber it.
 precmd_functions=(_zhist_precmd $precmd_functions)
 
-(( ${+FUNC_DESC} )) && FUNC_DESC[fhistory]='Search and edit history with fzf'
-
 _fhistory_select() {
 	local qpwd=${(q)PWD}
 	# Branches on $FZF_PROMPT so reloads keep whatever mode ctrl-g selected.
@@ -282,12 +280,6 @@ _fhistory_select() {
 			--bind "ctrl-x:execute-silent(zhist delete -id {1} -all)+reload($reload)" |
 		cut -f1)
 	[[ -n "$id" ]] && zhist get -id "$id"
-}
-
-fhistory() {
-	local selected
-	selected=$(_fhistory_select)
-	[[ -n "$selected" ]] && print -z "$selected"
 }
 
 _fhistory_widget() {
