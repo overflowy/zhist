@@ -266,8 +266,11 @@ _zhist_precmd() {
 			first="${first%% *}"
 			if (( ! ${+HIST_EXCLUDE} )) || [[ ${HIST_EXCLUDE[(ie)$first]} -gt ${#HIST_EXCLUDE} ]]; then
 				# Integer assignment truncates the float result.
+				local elapsed=0
 				local -i ms=0
-				(( start > 0 )) && (( ms = (EPOCHREALTIME - start) * 1000 ))
+				(( start > 0 )) && elapsed=$(( EPOCHREALTIME - start ))
+				(( ms = elapsed * 1000 ))
+				(( start > 0 && elapsed >= 0 && ms == 0 )) && ms=1
 				(( ms < 0 )) && ms=0
 				print -r -- "$cmd" | zhist add -dir "$dir" -exit $ret -ms $ms
 			fi
