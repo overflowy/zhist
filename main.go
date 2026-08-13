@@ -104,17 +104,13 @@ func cmdList(args []string) {
 	now := time.Now().Unix()
 	w := bufio.NewWriter(os.Stdout)
 	defer w.Flush()
-	seen := make(map[string]bool, len(rows))
-	// Newest first, dedup by command keeping the most recent occurrence.
+	// Newest first. Repeated runs each get a row; the picker stays faithful
+	// to what the user did.
 	for _, row := range slices.Backward(rows) {
 		e := row.Entry
 		if *dir != "" && e.D != *dir {
 			continue
 		}
-		if seen[e.C] {
-			continue
-		}
-		seen[e.C] = true
 		disp := e.C
 		if i := strings.IndexByte(disp, '\n'); i >= 0 {
 			disp = disp[:i] + " ⏎"

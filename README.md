@@ -105,7 +105,7 @@ Compatibility notes:
 ```
 zhist init [-no-arrow-binds]  Print the zsh integration script
 zhist add -dir D -exit N [-ms N]  Append an entry; command read from stdin
-zhist list [-dir D]        Print entries for fzf, newest first, deduplicated
+zhist list [-dir D]        Print entries for fzf, newest first
 zhist get -id ID           Print the full command for an entry
 zhist delete -id ID [-all] Delete an entry, or all entries with its command
 zhist import FILE          Import a zsh EXTENDED_HISTORY file
