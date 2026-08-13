@@ -221,7 +221,7 @@ func cmdImport(args []string) {
 
 // zshInit is the shell integration loaded via eval "$(zhist init)".
 // It records every command with cwd and exit status, and binds the fzf
-// search UI (ctrl-r, bare arrows; ctrl-g toggles global/directory mode).
+// search UI to ctrl-r (ctrl-g toggles global/directory mode).
 const zshInit = `
 _zhist_cmd=""
 _zhist_dir=""
@@ -299,13 +299,27 @@ _fhistory_widget() {
 }
 zle -N _fhistory_widget
 bindkey '^R' _fhistory_widget
-# Both normal and application cursor sequences; which one the terminal sends
-# depends on keypad mode.
+`
+
+// zshArrowBinds is appended to zshInit unless init runs with -no-arrow-binds.
+// Both normal and application cursor sequences; which one the terminal sends
+// depends on keypad mode.
+const zshArrowBinds = `
 bindkey '^[[A' _fhistory_widget
 bindkey '^[OA' _fhistory_widget
 bindkey '^[[B' _fhistory_widget
 bindkey '^[OB' _fhistory_widget
 `
+
+func cmdInit(args []string) {
+	fs := flag.NewFlagSet("init", flag.ExitOnError)
+	noArrowBinds := fs.Bool("no-arrow-binds", false, "do not bind the up/down arrow keys")
+	fs.Parse(args)
+	fmt.Print(zshInit)
+	if !*noArrowBinds {
+		fmt.Print(zshArrowBinds)
+	}
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -314,7 +328,7 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "init":
-		fmt.Print(zshInit)
+		cmdInit(os.Args[2:])
 	case "add":
 		cmdAdd(os.Args[2:])
 	case "list":

@@ -49,6 +49,9 @@ and never render red.
 | `ctrl-x`           | Delete all entries with the same command          |
 | `tab`              | Accept and leave the command on the line          |
 
+Pass `-no-arrow-binds` to `zhist init` to keep the default up/down behavior.
+Only `ctrl-r` opens the picker then.
+
 ## Ignoring commands
 
 Define a `HIST_EXCLUDE` array in `.zshrc` to keep commands out of the store.
@@ -99,7 +102,7 @@ Compatibility notes:
 ## CLI
 
 ```
-zhist init                 Print the zsh integration script
+zhist init [-no-arrow-binds]  Print the zsh integration script
 zhist add -dir D -exit N   Append an entry; command read from stdin
 zhist list [-dir D]        Print entries for fzf, newest first, deduplicated
 zhist get -id ID           Print the full command for an entry
