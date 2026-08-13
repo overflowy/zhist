@@ -1,17 +1,18 @@
 # zhist
 
 A shell history tool for zsh, written in Go. It records every command with its
-working directory and exit status. It replaces the zsh history file as the
-persistent store.
+working directory, exit status, and duration. It replaces the zsh history file
+as the persistent store.
 
 https://github.com/user-attachments/assets/a7e1226b-e695-4505-ad96-a5da6dfb3afd
 
 ## Purpose
 
 Native zsh history stores a command and a timestamp, nothing else. zhist stores
-context: where you ran a command and whether it failed. The fzf picker uses
-that context. Failed commands show in red. One key toggles between global
-history and the current directory's history.
+context: where you ran a command, whether it failed, and how long it took. The
+fzf picker uses that context. Failed commands show in red, and each entry shows
+its duration. One key toggles between global history and the current
+directory's history.
 
 ## Install
 
@@ -35,8 +36,8 @@ Import existing history once:
 zhist import ~/.zsh_history
 ```
 
-Imported entries have no directory or exit status. They show a blank directory
-and never render red.
+Imported entries have no directory, exit status, or duration. They show a
+blank directory and never render red.
 
 ## Keys
 
@@ -103,7 +104,7 @@ Compatibility notes:
 
 ```
 zhist init [-no-arrow-binds]  Print the zsh integration script
-zhist add -dir D -exit N   Append an entry; command read from stdin
+zhist add -dir D -exit N [-ms N]  Append an entry; command read from stdin
 zhist list [-dir D]        Print entries for fzf, newest first, deduplicated
 zhist get -id ID           Print the full command for an entry
 zhist delete -id ID [-all] Delete an entry, or all entries with its command

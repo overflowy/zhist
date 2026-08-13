@@ -17,7 +17,7 @@ func testStore(t *testing.T) Store {
 func TestStoreAppendListRoundTrip(t *testing.T) {
 	store := testStore(t)
 	entries := []Entry{
-		{T: 10, D: "/tmp/one", X: 0, C: "printf hello"},
+		{T: 10, D: "/tmp/one", X: 0, C: "printf hello", M: 1250},
 		{T: 20, D: "/tmp/two", X: 1, C: "printf 'one\\ntwo'\nprintf done"},
 	}
 	if err := store.Append(entries); err != nil {

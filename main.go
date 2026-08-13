@@ -42,11 +42,29 @@ func relTime(t int64, now int64) string {
 	}
 }
 
+// fmtDur renders a duration in milliseconds; "" when unknown.
+func fmtDur(ms int64) string {
+	switch {
+	case ms <= 0:
+		return ""
+	case ms < 1000:
+		return fmt.Sprintf("%dms", ms)
+	case ms < 60_000:
+		// Truncate like the branches below; rounding could show "60.0s".
+		return fmt.Sprintf("%d.%ds", ms/1000, ms%1000/100)
+	case ms < 3_600_000:
+		return fmt.Sprintf("%dm%02ds", ms/60_000, ms%60_000/1000)
+	default:
+		return fmt.Sprintf("%dh%02dm", ms/3_600_000, ms%3_600_000/60_000)
+	}
+}
+
 func cmdAdd(args []string) {
 	fs := flag.NewFlagSet("add", flag.ExitOnError)
 	dir := fs.String("dir", "", "working directory")
 	exit := fs.Int("exit", -1, "exit status")
 	ts := fs.Int64("ts", 0, "unix timestamp (default now)")
+	ms := fs.Int64("ms", 0, "duration in milliseconds (0 if unknown)")
 	fs.Parse(args)
 	raw, _ := io.ReadAll(os.Stdin)
 	cmd := strings.TrimRight(string(raw), "\n")
@@ -57,7 +75,8 @@ func cmdAdd(args []string) {
 	if t == 0 {
 		t = time.Now().Unix()
 	}
-	if err := newStore(dataPath()).Append([]Entry{{T: t, D: *dir, X: *exit, C: cmd}}); err != nil {
+	m := max(*ms, 0)
+	if err := newStore(dataPath()).Append([]Entry{{T: t, D: *dir, X: *exit, C: cmd, M: m}}); err != nil {
 		fmt.Fprintln(os.Stderr, "zhist:", err)
 		os.Exit(1)
 	}
@@ -104,9 +123,10 @@ func cmdList(args []string) {
 		if e.X > 0 {
 			col = cRed
 		}
-		fmt.Fprintf(w, "%s\t%s%8s%s\t%s%s%s\n",
+		fmt.Fprintf(w, "%s\t%s%8s%s\t%s%7s%s\t%s%s%s\n",
 			row.ID,
 			cBlue, relTime(e.T, now), cReset,
+			cDim, fmtDur(e.M), cReset,
 			col, disp, cReset)
 	}
 }
@@ -223,12 +243,15 @@ func cmdImport(args []string) {
 // It records every command with cwd and exit status, and binds the fzf
 // search UI to ctrl-r (ctrl-g toggles global/directory mode).
 const zshInit = `
+zmodload zsh/datetime
 _zhist_cmd=""
 _zhist_dir=""
+_zhist_start=0
 
 _zhist_preexec() {
 	_zhist_cmd="$1"
 	_zhist_dir="$PWD"
+	_zhist_start=$EPOCHREALTIME
 }
 
 # Returns $ret so later precmd hooks (e.g. the prompt) still see the real
@@ -236,13 +259,17 @@ _zhist_preexec() {
 _zhist_precmd() {
 	local ret=$?
 	if [[ -n "$_zhist_cmd" ]]; then
-		local cmd="$_zhist_cmd" dir="$_zhist_dir"
+		local cmd="$_zhist_cmd" dir="$_zhist_dir" start="$_zhist_start"
 		_zhist_cmd=""
 		if [[ "$cmd" != \ * ]]; then
 			local first="${cmd%%$'\n'*}"
 			first="${first%% *}"
 			if (( ! ${+HIST_EXCLUDE} )) || [[ ${HIST_EXCLUDE[(ie)$first]} -gt ${#HIST_EXCLUDE} ]]; then
-				print -r -- "$cmd" | zhist add -dir "$dir" -exit $ret
+				# Integer assignment truncates the float result.
+				local -i ms=0
+				(( start > 0 )) && (( ms = (EPOCHREALTIME - start) * 1000 ))
+				(( ms < 0 )) && ms=0
+				print -r -- "$cmd" | zhist add -dir "$dir" -exit $ret -ms $ms
 			fi
 		fi
 	fi

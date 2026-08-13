@@ -21,10 +21,11 @@ const maxJSONLineSize = 4 * 1024 * 1024
 var errEntryNotFound = errors.New("entry not found")
 
 type Entry struct {
-	T int64  `json:"t"` // unix timestamp
-	D string `json:"d"` // working directory ("" if unknown)
-	X int    `json:"x"` // exit status (-1 if unknown)
-	C string `json:"c"` // full command, may contain newlines
+	T int64  `json:"t"`           // unix timestamp
+	D string `json:"d"`           // working directory ("" if unknown)
+	X int    `json:"x"`           // exit status (-1 if unknown)
+	C string `json:"c"`           // full command, may contain newlines
+	M int64  `json:"m,omitempty"` // duration in milliseconds (0 if unknown)
 }
 
 type Row struct {
