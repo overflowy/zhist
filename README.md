@@ -4,7 +4,7 @@ A shell history tool for zsh, written in Go. It records every command with its
 working directory, exit status, and duration. It replaces the zsh history file
 as the persistent store.
 
-https://github.com/user-attachments/assets/a7e1226b-e695-4505-ad96-a5da6dfb3afd
+https://github.com/user-attachments/assets/343446a8-d235-4cb4-9e24-10e95edde55a
 
 ## Purpose
 
