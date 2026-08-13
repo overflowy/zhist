@@ -123,10 +123,10 @@ func cmdList(args []string) {
 		if e.X > 0 {
 			col = cRed
 		}
-		fmt.Fprintf(w, "%s\t%s%8s%s\t%s%7s%s\t%s%s%s\n",
+		fmt.Fprintf(w, "%s\t%s%7s%s\t%s%8s%s\t%s%s%s\n",
 			row.ID,
-			cBlue, relTime(e.T, now), cReset,
 			cDim, fmtDur(e.M), cReset,
+			cBlue, relTime(e.T, now), cReset,
 			col, disp, cReset)
 	}
 }
