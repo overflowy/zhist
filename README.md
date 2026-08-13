@@ -16,7 +16,7 @@ directory's history.
 
 ## Install
 
-Homebrew:
+Homebrew (recommended):
 
 ```sh
 brew install overflowy/tap/zhist
