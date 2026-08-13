@@ -232,6 +232,39 @@ func TestStoreExitStatusDistinguishesIDsAndFallbackGet(t *testing.T) {
 	}
 }
 
+func TestStoreDurationDistinguishesIDsAndFallbackGet(t *testing.T) {
+	store := testStore(t)
+	entries := []Entry{
+		{T: 5, D: "/tmp", X: 0, C: "shift offsets"},
+		{T: 10, D: "/tmp", X: 0, C: "same", M: 100},
+		{T: 10, D: "/tmp", X: 0, C: "same", M: 200},
+	}
+	if err := store.Append(entries); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[1].ID == rows[2].ID {
+		t.Fatalf("entries with different durations have the same id %q", rows[1].ID)
+	}
+
+	ids := []string{rows[1].ID, rows[2].ID}
+	if err := store.Delete(rows[0].ID, false); err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range ids {
+		got, err := store.Get(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.M != entries[i+1].M {
+			t.Errorf("Get(%q) duration = %d, want %d", id, got.M, entries[i+1].M)
+		}
+	}
+}
+
 func TestStoreDuplicateIDsAndDelete(t *testing.T) {
 	store := testStore(t)
 	duplicate := Entry{T: 10, D: "/tmp", X: 0, C: "same"}
