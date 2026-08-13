@@ -1,30 +1,29 @@
 name: Release
 
 on:
-  release:
-    types: [created]
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
 
 jobs:
-  releases-matrix:
-    name: Release Go Binary
+  goreleaser:
     runs-on: ubuntu-latest
-    permissions: write-all
-    strategy:
-      matrix:
-        goos: [linux, darwin]
-        goarch: [amd64, arm64]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Build and release
-        uses: wangyoucao577/go-release-action@v1.55
+      - uses: actions/checkout@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          goos: ${{ matrix.goos }}
-          goarch: ${{ matrix.goarch }}
-          goversion: "1.26.5"
-          binary_name: "zhist"
-          retry: 10
-          overwrite: true
-          extra_files: LICENSE README.md
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}

@@ -1,0 +1,35 @@
+version: 2
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+checksum:
+  name_template: checksums.txt
+
+homebrew_casks:
+  - repository:
+      owner: overflowy
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/overflowy/zhist
+    description: Shell history for zsh with directory, exit status, and duration
+    dependencies:
+      - formula: fzf
+    caveats: |
+      Add to .zshrc:
+        eval "$(zhist init)"
+    # The binaries are not signed or notarized; clear the quarantine flag so
+    # macOS runs them.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/zhist"]
+          end

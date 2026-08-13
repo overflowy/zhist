@@ -16,11 +16,27 @@ directory's history.
 
 ## Install
 
+Homebrew:
+
+```sh
+brew install overflowy/tap/zhist
+```
+
+Go:
+
 ```sh
 go install github.com/overflowy/zhist@latest
 ```
 
+zinit, downloading the binary from GitHub releases:
+
+```zsh
+zinit ice from"gh-r" as"program"
+zinit light overflowy/zhist
+```
+
 Requires [fzf](https://github.com/junegunn/fzf) 0.45 or newer for the picker.
+Homebrew installs it as a dependency.
 
 ## Setup
 
@@ -29,6 +45,16 @@ Add to `.zshrc`:
 ```zsh
 eval "$(zhist init)"
 ```
+
+Plugin managers can source `zhist.plugin.zsh` instead, which runs the same
+line. Example with zsh-snap:
+
+```zsh
+znap source overflowy/zhist
+```
+
+The plugin file only loads the integration. Install the binary with Homebrew,
+Go, or zinit first.
 
 Import existing history once:
 
