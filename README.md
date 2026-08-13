@@ -136,3 +136,8 @@ zhist get -id ID           Print the full command for an entry
 zhist delete -id ID [-all] Delete an entry, or all entries with its command
 zhist import FILE          Import a zsh EXTENDED_HISTORY file
 ```
+
+## License
+
+MIT
+
