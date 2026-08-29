@@ -95,6 +95,23 @@ HIST_EXCLUDE=(cd ls clear pwd exit)
   the change applies to the next command.
 - A leading space also skips recording, for one-off exclusions.
 
+## Inline suggestions
+
+`zhist search` prints stored commands matching a prefix, newest first, with
+repeated runs collapsed. It exits 1 when nothing matches. This gives
+[zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions)
+fish-style ghost text backed by the zhist store instead of the zsh history
+file:
+
+```zsh
+_zsh_autosuggest_strategy_zhist() {
+	suggestion=$(zhist search -limit 1 -- "$1")
+}
+ZSH_AUTOSUGGEST_STRATEGY=(zhist)
+```
+
+The `--` keeps a buffer starting with `-` from being parsed as a flag.
+
 ## Recommended zsh history settings
 
 zhist owns persistence. Keep native history in memory only, for line stepping
@@ -132,6 +149,7 @@ Compatibility notes:
 zhist init [-no-arrow-binds]  Print the zsh integration script
 zhist add -dir D -exit N [-ms N]  Append an entry; command read from stdin
 zhist list [-dir D]        Print entries for fzf, newest first
+zhist search [-dir D] [-limit N] PREFIX  Print commands starting with PREFIX, newest first
 zhist get -id ID           Print the full command for an entry
 zhist delete -id ID [-all] Delete an entry, or all entries with its command
 zhist import FILE          Import a zsh EXTENDED_HISTORY file

@@ -127,6 +127,55 @@ func cmdList(args []string) {
 	}
 }
 
+// searchRows returns commands matching prefix, newest first. Repeated runs of
+// the same command collapse into the newest one, so a consumer taking the top
+// result gets the most recent distinct command. limit 0 means no limit.
+func searchRows(rows []Row, prefix, dir string, limit int) []string {
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].T < rows[j].T })
+	seen := make(map[string]bool)
+	var out []string
+	for _, row := range slices.Backward(rows) {
+		e := row.Entry
+		if dir != "" && e.D != dir {
+			continue
+		}
+		if !strings.HasPrefix(e.C, prefix) || seen[e.C] {
+			continue
+		}
+		seen[e.C] = true
+		out = append(out, e.C)
+		if limit > 0 && len(out) == limit {
+			break
+		}
+	}
+	return out
+}
+
+func cmdSearch(args []string) {
+	fs := flag.NewFlagSet("search", flag.ExitOnError)
+	dir := fs.String("dir", "", "only entries recorded in this directory")
+	limit := fs.Int("limit", 0, "stop after this many results (0 = no limit)")
+	fs.Parse(args)
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: zhist search [-dir D] [-limit N] <prefix>")
+		os.Exit(2)
+	}
+	rows, err := newStore(dataPath()).List()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "zhist:", err)
+		os.Exit(1)
+	}
+	matches := searchRows(rows, fs.Arg(0), *dir, *limit)
+	if len(matches) == 0 {
+		os.Exit(1)
+	}
+	w := bufio.NewWriter(os.Stdout)
+	defer w.Flush()
+	for _, c := range matches {
+		fmt.Fprintln(w, c)
+	}
+}
+
 func cmdGet(args []string) {
 	fs := flag.NewFlagSet("get", flag.ExitOnError)
 	id := fs.String("id", "", "entry id")
@@ -349,7 +398,7 @@ func cmdInit(args []string) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: zhist <init|add|list|get|delete|import> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: zhist <init|add|list|search|get|delete|import> [flags]")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -359,6 +408,8 @@ func main() {
 		cmdAdd(os.Args[2:])
 	case "list":
 		cmdList(os.Args[2:])
+	case "search":
+		cmdSearch(os.Args[2:])
 	case "get":
 		cmdGet(os.Args[2:])
 	case "delete":

@@ -1,6 +1,68 @@
 package main
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+func searchFixture() []Row {
+	return []Row{
+		{Entry: Entry{T: 1, D: "/a", C: "git status"}},
+		{Entry: Entry{T: 2, D: "/b", C: "git push"}},
+		{Entry: Entry{T: 3, D: "/a", C: "ls -la"}},
+		{Entry: Entry{T: 4, D: "/b", C: "git status"}},
+		{Entry: Entry{T: 5, D: "/a", C: "go test ./..."}},
+	}
+}
+
+func TestSearchRowsPrefixNewestFirstDedup(t *testing.T) {
+	got := searchRows(searchFixture(), "git", "", 0)
+	// "git status" ran twice; only the newest run survives.
+	want := []string{"git status", "git push"}
+	if !slices.Equal(got, want) {
+		t.Errorf("searchRows(git) = %q, want %q", got, want)
+	}
+}
+
+func TestSearchRowsDirFilter(t *testing.T) {
+	got := searchRows(searchFixture(), "git", "/a", 0)
+	want := []string{"git status"}
+	if !slices.Equal(got, want) {
+		t.Errorf("searchRows(git, /a) = %q, want %q", got, want)
+	}
+}
+
+func TestSearchRowsLimit(t *testing.T) {
+	got := searchRows(searchFixture(), "g", "", 1)
+	want := []string{"go test ./..."}
+	if !slices.Equal(got, want) {
+		t.Errorf("searchRows(g, limit 1) = %q, want %q", got, want)
+	}
+}
+
+func TestSearchRowsEmptyPrefixMatchesAll(t *testing.T) {
+	got := searchRows(searchFixture(), "", "", 0)
+	want := []string{"go test ./...", "git status", "ls -la", "git push"}
+	if !slices.Equal(got, want) {
+		t.Errorf("searchRows(\"\") = %q, want %q", got, want)
+	}
+}
+
+func TestSearchRowsNoMatch(t *testing.T) {
+	if got := searchRows(searchFixture(), "cargo", "", 0); len(got) != 0 {
+		t.Errorf("searchRows(cargo) = %q, want empty", got)
+	}
+}
+
+func TestSearchRowsUnsortedInput(t *testing.T) {
+	rows := searchFixture()
+	slices.Reverse(rows)
+	got := searchRows(rows, "git", "", 0)
+	want := []string{"git status", "git push"}
+	if !slices.Equal(got, want) {
+		t.Errorf("searchRows(git, reversed input) = %q, want %q", got, want)
+	}
+}
 
 func TestFmtDur(t *testing.T) {
 	cases := []struct {
