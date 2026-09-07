@@ -13,6 +13,11 @@ builds:
 checksum:
   name_template: checksums.txt
 
+# Overwrite existing assets so a rerun of a partially failed release does not
+# fail with "already_exists".
+release:
+  mode: replace
+
 homebrew_casks:
   - repository:
       owner: overflowy
