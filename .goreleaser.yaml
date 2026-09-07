@@ -27,9 +27,13 @@ homebrew_casks:
         eval "$(zhist init)"
     # The binaries are not signed or notarized; clear the quarantine flag so
     # macOS runs them.
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/zhist"]
-          end
+    #
+    # This goes in custom_block rather than hooks.post.install because
+    # GoReleaser renders hooks with the legacy `postflight` stanza, which
+    # Homebrew deprecated in favour of the declarative `postflight_steps`.
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/zhist"]
+        end
+      end
